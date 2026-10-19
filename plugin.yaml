@@ -1,0 +1,15 @@
+name: world-clock
+label: World Clock
+version: 1.0.0
+author: cygnostik
+license: MIT
+homepage: https://github.com/cygnostik/hermes-world-clock
+description: >
+  A status-bar world clock for Hermes Desktop. Click the time to switch
+  between the zones you've enabled; turn zones on and off from the same
+  menu. Desktop-only (desktop/plugin.js inside the plugin SDK surface);
+  no agent tools, hooks, middleware, env vars or network access.
+tags: [desktop, statusbar, time, timezone, clock]
+provides_tools: []
+provides_hooks: []
+requires_env: []

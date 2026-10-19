@@ -1,0 +1,5 @@
+node_modules/
+media-harness/out/
+media-harness/shots/
+.DS_Store
+media-harness/

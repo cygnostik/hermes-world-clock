@@ -1,0 +1,110 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:OD;src:local("Overdrive"),local("Overdrive Regular")}
+@font-face{font-family:VT323;src:url(fonts/vt323-VT323-Regular.ttf)}
+@font-face{font-family:Departure;src:url(fonts/DepartureMono-Regular.woff2)}
+*{box-sizing:border-box;margin:0}
+html,body{width:var(--w);height:var(--h);overflow:hidden;background:#02030a}
+#s{position:relative;width:var(--w);height:var(--h);overflow:hidden;background:radial-gradient(90% 70% at 50% 72%,#0b1a4a 0%,#060b24 40%,#02030a 78%)}
+canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#earth{image-rendering:pixelated}
+.title,.ghostR,.ghostB{position:absolute;left:0;right:0;white-space:nowrap;text-align:center;font-family:OD;line-height:1;letter-spacing:.01em}
+.title{color:#fff;background:linear-gradient(180deg,#fff 0%,#dff6ff 38%,#7fd4ff 49%,#16295e 51%,#9fb8ff 66%,#fff 94%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+ filter:drop-shadow(0 2px 0 #02030a) drop-shadow(0 0 3px #02030a) drop-shadow(0 0 16px #2f7bff) drop-shadow(0 0 34px #2f7bffaa)}
+.ghostR,.ghostB{mix-blend-mode:screen;opacity:.5}.ghostR{color:#ff2a55;transform:translateX(-4px)}.ghostB{color:#25d6ff;transform:translateX(4px)}
+.sub{position:absolute;left:0;right:0;text-align:center;font-family:Departure;letter-spacing:.32em;color:#e6f0ff;text-shadow:0 0 10px #2f7bff,0 0 2px #fff,0 1px 0 #02030a}
+.osd{position:absolute;font-family:VT323;color:#f4fff8;text-shadow:2px 0 #ff2a6d,-2px 0 #2af5ff,0 0 8px #fff8,0 0 3px #000;letter-spacing:.04em;white-space:nowrap}
+.ui{position:absolute;z-index:3;border-radius:10px;box-shadow:0 0 0 1px #7fb4ff88,0 0 30px #2f7bff66,0 20px 60px #000c;overflow:hidden;transform:perspective(1200px) rotateY(-8deg)}
+.ui img{display:block;width:100%}
+.ui::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(#0000 0 3px,#00000018 3px 4px)}
+.scan{position:absolute;inset:0;background:repeating-linear-gradient(#0000 0 2px,#00000038 2px 4px);pointer-events:none}
+.vig{position:absolute;inset:0;background:radial-gradient(130% 100% at 50% 50%,#0000 55%,#000b 100%);pointer-events:none}
+</style></head><body><div id="s">
+<canvas id="stars"></canvas><canvas id="earth"></canvas><canvas id="ground"></canvas>
+<div class="ghostR">World Clock</div><div class="ghostB">World Clock</div><div class="title">World Clock</div>
+<div class="sub" id="sub">EVERY TIME ZONE · ONE CLICK</div>
+<div class="osd" id="osd">Los Angeles 10:51am</div>
+<div class="osd" id="ch">CH 03 · HERMES DESKTOP</div>
+<div class="ui" id="ui" style="display:none"><img src="shots/menu.png"></div>
+<canvas id="n"></canvas><div class="scan"></div><div class="vig"></div>
+</div>
+<script>
+const P=new URLSearchParams(location.search);const W=+P.get('w')||1200,H=+P.get('h')||600,mode=P.get('mode')||'catalog';const hero=mode==='hero';
+const R=document.documentElement.style;R.setProperty('--w',W+'px');R.setProperty('--h',H+'px');
+let seed=11;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+const HZ=H*.68;
+const EX=hero?W*.27:W*.5;
+const ER=H*.29, EY=HZ-ER*.62;
+const $=id=>document.getElementById(id);
+function cv(id){const c=$(id);c.width=W;c.height=H;return c.getContext('2d')}
+
+{const x=cv('stars');for(let i=0;i<W*H/2600;i++){const y=rnd()*HZ,a=.25+rnd()*.75,s=rnd()<.08?2:1;x.fillStyle=`rgba(${200+rnd()*55|0},${215+rnd()*40|0},255,${a})`;x.fillRect(rnd()*W|0,y|0,s,s)}}
+
+// Pixel earth: orthographic projection of Natural Earth 110m land (public domain)
+async function earth(){
+ const geo=await (await fetch('land-110m.geojson')).json();
+ const polys=[];for(const f of geo.features){const g=f.geometry;(g.type==='Polygon'?[g.coordinates]:g.coordinates).forEach(p=>polys.push(p[0]))}
+ const inside=(lon,lat)=>{let c=false;for(const r of polys){for(let i=0,j=r.length-1;i<r.length;j=i++){const[xi,yi]=r[i],[xj,yj]=r[j];if((yi>lat)!==(yj>lat)&&lon<(xj-xi)*(lat-yi)/(yj-yi)+xi)c=!c}}return c};
+ const N=hero?64:72, px=Math.max(2,Math.round(2*ER/N));const n=Math.round(2*ER/px);
+ const lon0=-100*Math.PI/180, lat0=18*Math.PI/180;
+ const L=[.62,.42,.66];const ll=Math.hypot(...L);const Lv=L.map(v=>v/ll);
+ const off=document.createElement('canvas');off.width=n;off.height=n;const o=off.getContext('2d');
+ const ocean=['#06163f','#0b2766','#12409a','#1d63c9','#3f8ef0'], land=['#0f2a12','#1d4a1c','#2f6e28','#4f9a3a','#8cc66a'], ice=['#5a6a86','#8fa2c0','#c9d8ee','#eef6ff','#ffffff'];
+ for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+  const x=(i+.5)/n*2-1,y=1-(j+.5)/n*2,r2=x*x+y*y;if(r2>1)continue;const z=Math.sqrt(1-r2);
+  const lat=Math.asin(y*Math.cos(lat0)+z*Math.sin(lat0));const lon=lon0+Math.atan2(x,z*Math.cos(lat0)-y*Math.sin(lat0));
+  const d=lon*180/Math.PI,a=lat*180/Math.PI;const dd=((d+540)%360)-180;
+  let lum=Math.max(0,x*Lv[0]+y*Lv[1]+z*Lv[2]);let k=Math.min(4,Math.floor(lum*4.6+(((i+j)&1)?.25:0)));
+  const pal=Math.abs(a)>66?ice:inside(dd,a)?land:ocean;
+  o.fillStyle=lum<.03?'#030817':pal[k];o.fillRect(i,j,1,1);
+ }
+ seed=29;for(let c=0;c<26;c++){const cx=rnd()*n,cy=rnd()*n,len=3+rnd()*9|0;for(let t=0;t<len;t++){const i=cx+t|0,j=cy+(t%3===0?1:0)|0;const x=(i+.5)/n*2-1,y=1-(j+.5)/n*2;if(x*x+y*y>.94)continue;const lum=x*Lv[0]+y*Lv[1]+Math.sqrt(Math.max(0,1-x*x-y*y))*Lv[2];if(lum<.2)continue;o.fillStyle=`rgba(255,255,255,${.55+lum*.4})`;o.fillRect(i,j,1,1)}}
+ const x=cv('earth');x.imageSmoothingEnabled=false;
+ const g=x.createRadialGradient(EX,EY,ER*.92,EX,EY,ER*1.22);g.addColorStop(0,'rgba(80,160,255,.55)');g.addColorStop(1,'rgba(40,90,255,0)');x.fillStyle=g;x.beginPath();x.arc(EX,EY,ER*1.22,0,7);x.fill();
+ x.drawImage(off,Math.round(EX-n*px/2),Math.round(EY-n*px/2),n*px,n*px);
+ x.fillStyle='rgba(150,205,255,.85)';for(let t=0;t<720;t++){const an=t/720*Math.PI*2;const rx=Math.cos(an),ry=Math.sin(an);if(rx*Lv[0]-ry*Lv[1]<-.15)continue;x.fillRect(Math.round((EX+rx*ER)/px)*px,Math.round((EY+ry*ER)/px)*px,px,px)}
+}
+
+// Ground: white perspective grid broken by vector mock craters
+function ground(){
+ const x=cv('ground');
+ const f=H*.9, camY=H*.55;
+ const proj=(X,Z)=>[W/2+X*f/Z,HZ+camY*f/Z];
+ const g=x.createLinearGradient(0,HZ,0,H);g.addColorStop(0,'#0a1230');g.addColorStop(1,'#03050e');x.fillStyle=g;x.fillRect(0,HZ,W,H-HZ);
+ const Z0=f*camY/(H-HZ)*.98,Z1=Z0*14;
+ const want=[[-.9,1.6,.55],[.95,1.25,.42],[-.15,3.2,.9],[1.9,4.8,1.1],[-2.3,5.6,1.3],[.5,8.5,1.6],[-4.2,2.6,.7],[3.6,2.2,.6],[-1.2,11,2.4]];
+ const craters=want.map(([a,b,r])=>({X:a*Z0*.9,Z:b*Z0,r:r*Z0*.22}));
+ const inC=(X,Z)=>craters.some(c=>Math.hypot(X-c.X,Z-c.Z)<c.r*1.08);
+ const line=(pts,alpha)=>{let on=false;x.beginPath();for(const[X,Z]of pts){if(inC(X,Z)){on=false;continue}const[p,q]=proj(X,Z);on?x.lineTo(p,q):x.moveTo(p,q);on=true}x.strokeStyle=`rgba(255,255,255,${alpha})`;x.stroke()};
+ const step=Z0*.32;x.lineWidth=Math.max(1.2,H/420);
+ for(let X=-Z0*12;X<=Z0*12;X+=step){const pts=[];for(let Z=Z0;Z<Z1;Z+=Z0*.04)pts.push([X,Z]);line(pts,.8)}
+ for(let Z=Z0;Z<Z1;Z+=step){const pts=[];for(let X=-Z0*12;X<=Z0*12;X+=Z0*.04)pts.push([X,Z]);line(pts,.85*Math.max(.15,1-(Z-Z0)/(Z1*.55)))}
+ for(const c of craters){const fade=Math.max(.2,1-(c.Z-Z0)/(Z1*.55));
+  x.beginPath();for(let t=0;t<=64;t++){const an=t/64*Math.PI*2;const[p,q]=proj(c.X+Math.cos(an)*c.r,c.Z+Math.sin(an)*c.r);t?x.lineTo(p,q):x.moveTo(p,q)}
+  x.fillStyle=`rgba(2,4,12,${.55*fade})`;x.fill();
+  x.setLineDash([H*.03,H*.012]);x.strokeStyle=`rgba(255,255,255,${.95*fade})`;x.lineWidth=Math.max(1.4,H/360);x.stroke();x.setLineDash([]);
+  x.beginPath();for(let t=0;t<=32;t++){const an=Math.PI*(1.05+t/32*.9);const[p,q]=proj(c.X+Math.cos(an)*c.r*.72,c.Z+Math.sin(an)*c.r*.72);t?x.lineTo(p,q):x.moveTo(p,q)}
+  x.strokeStyle=`rgba(255,255,255,${.4*fade})`;x.lineWidth=1;x.stroke();
+ }
+ const hz=x.createLinearGradient(0,0,W,0);hz.addColorStop(0,'rgba(60,140,255,0)');hz.addColorStop(.18,'#3d8bff');hz.addColorStop(.5,'#9fd0ff');hz.addColorStop(.82,'#3d8bff');hz.addColorStop(1,'rgba(60,140,255,0)');
+ x.shadowColor='#2a6dff';x.shadowBlur=H*.05;x.fillStyle=hz;x.fillRect(0,HZ-1.5,W,3);x.shadowBlur=H*.012;x.fillRect(0,HZ-1,W,2);x.shadowBlur=0;
+ const fog=x.createLinearGradient(0,HZ,0,HZ+H*.12);fog.addColorStop(0,'rgba(40,110,255,.28)');fog.addColorStop(1,'rgba(40,110,255,0)');x.fillStyle=fog;x.fillRect(0,HZ,W,H*.12);
+}
+
+const T=['.title','.ghostR','.ghostB'].map(s=>document.querySelector(s));
+const titleTop=hero?H*.2:H*.17;T.forEach(e=>{e.style.top=titleTop+'px';e.style.fontSize=(H*.2)+'px';if(hero){e.style.right='auto';e.style.left=(W*.05)+'px';e.style.textAlign='left'}});
+const sub=$('sub');sub.style.fontSize=(H*(hero?.03:.038))+'px';
+const osd=$('osd');osd.style.fontSize=(H*.07)+'px';osd.style.left='0';osd.style.right='0';osd.style.textAlign='center';osd.style.top=(HZ-H*.105)+'px';
+const ch=$('ch');ch.style.fontSize=(H*.05)+'px';ch.style.left=(W*.04)+'px';ch.style.bottom=(H*.205)+'px';
+if(hero){osd.style.right='auto';osd.style.left='0';osd.style.width=(EX*2)+'px';const ui=$('ui');ui.style.display='block';ui.style.right=(W*.05)+'px';ui.style.top=(H*.16)+'px';ui.style.width=(W*.4)+'px'}
+
+function noise(){const x=cv('n');const img=x.createImageData(W,H);seed=7;for(let i=0;i<img.data.length;i+=4){const v=rnd()*255;img.data[i]=img.data[i+1]=img.data[i+2]=v;img.data[i+3]=rnd()<.5?18:0}x.putImageData(img,0,0);
+ for(const[t,hh]of(hero?[[.06,.012],[.93,.03]]:[[.07,.014],[.93,.028]])){const yy=H*t,h=Math.max(3,H*hh);for(let k=0;k<W;k+=2){x.fillStyle=`rgba(255,255,255,${rnd()*.5})`;x.fillRect(k,yy+rnd()*h,2+rnd()*10,1+rnd()*2)}x.fillStyle='rgba(255,255,255,.06)';x.fillRect(0,yy,W,h)}
+ for(let i=0;i<5;i++){const yy=rnd()*H,h=1+rnd()*3;x.fillStyle=`rgba(${rnd()<.5?'255,60,200':'60,230,255'},.22)`;x.fillRect(rnd()*W*.3,yy,W*(.2+rnd()*.5),h)}}
+
+Promise.all([document.fonts.load('100px OD'),document.fonts.ready,earth()]).then(()=>{
+ ground();noise();
+ const maxW=hero?W*.5:W*.86;const probe=document.createElement('span');probe.style.cssText=`font-family:OD;font-size:${H*.2}px;letter-spacing:.01em;position:absolute;white-space:nowrap;visibility:hidden`;probe.textContent='World Clock';document.body.appendChild(probe);
+ const k=Math.min(1,maxW/probe.getBoundingClientRect().width);const fs=H*.2*k;T.forEach(e=>e.style.fontSize=fs+'px');
+ const th=T[0].getBoundingClientRect();sub.style.top=(th.bottom+H*.012)+'px';if(hero){sub.style.right='auto';sub.style.left=(W*.05)+'px';sub.style.textAlign='left'}
+ window.__fit={fs,k,od:document.fonts.check('20px OD')};document.body.dataset.ready='1'});
+</script></body></html>
